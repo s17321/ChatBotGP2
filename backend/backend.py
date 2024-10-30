@@ -1,25 +1,43 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from transformers import pipeline
+from sentence_transformers import SentenceTransformer
+import chromadb
 
 app = FastAPI()
 
-# Load the language model pipeline for text generation
+# Model do generowania odpowiedzi
 model = pipeline("text-generation", model="distilgpt2")
 
-# Define the request and response data structure
+# Model i baza do wyszukiwania kontekstowego
+embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+client = chromadb.Client()
+collection = client.get_collection("knowledge_base")
+
+# Struktury zapytań do FastAPI
 class Prompt(BaseModel):
     prompt: str
 
+class QueryRequest(BaseModel):
+    query: str
+
+# Endpoint do generowania odpowiedzi chatbota
 @app.post("/generate/")
 async def generate_response(prompt: Prompt):
-    # Generate response using the model with specific parameters
     response = model(
         prompt.prompt,
-        max_length=50,            # Limit the max length of response
+        max_length=50,
         num_return_sequences=1,
-        temperature=0.7,          # Control creativity (lower is more deterministic)
-        top_k=50,                 # Limit possible words at each step
-        truncation=True           # Ensure responses are truncated at max_length
+        temperature=0.7,
+        top_k=50,
+        truncation=True
     )
     return {"response": response[0]["generated_text"]}
+
+# Endpoint do wyszukiwania w bazie wiedzy
+@app.post("/knowledge_query/")
+async def knowledge_query(request: QueryRequest):
+    query_embedding = embedding_model.encode(request.query).tolist()
+    results = collection.find_similar(embedding=query_embedding, limit=3)
+    answers = [result["text"] for result in results]
+    return {"answers": answers}

@@ -3,3 +3,6 @@ uvicorn
 streamlit
 transformers
 torch
+PyPDFLoader
+chromadb
+pydantic
